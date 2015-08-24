@@ -13,7 +13,7 @@ module SassRailsSourceMaps
     end
 
     def evaluate_with_source_maps(context, locals, &block)
-      cache_store = Sprockets::SassCacheStore.new(context.environment)
+      cache_store = Sass::Rails::CacheStore.new(context.environment)
 
       options = {
         sourcemap_filename:  ::Sass::Util::sourcemap_name(basename),
@@ -32,14 +32,18 @@ module SassRailsSourceMaps
         }
       }
 
-      result, mapping = ::Sass::Engine.new(data, options).render_with_sourcemap("/#{SOURCE_MAPS_DIRECTORY}/#{options[:sourcemap_filename]}")
-
+      engine = ::Sass::Engine.new(data, options)
+      result, mapping = engine.render_with_sourcemap("/#{SOURCE_MAPS_DIRECTORY}/#{options[:sourcemap_filename]}")
       write_output(data, ::Rails.root.join("public", SOURCE_MAPS_DIRECTORY, basename).to_s)
       write_output(mapping.to_json(
           css_path:       basename.gsub(".#{syntax.to_s}", ""),
           sourcemap_path: ::Rails.root.join("public", SOURCE_MAPS_DIRECTORY, options[:sourcemap_filename])) + "\n",
         ::Rails.root.join("public", SOURCE_MAPS_DIRECTORY, options[:sourcemap_filename]).to_s)
-      copy_dependencies(context._dependency_paths)
+
+      engine.dependencies.map do |dependency|
+        context.depend_on(dependency.options[:filename])
+        copy_dependencies([dependency.options[:filename]])
+      end
 
       result
     rescue ::Sass::SyntaxError => e
